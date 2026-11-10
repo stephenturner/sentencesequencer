@@ -1,0 +1,429 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Sentence Sequencer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a lab bench. Controls on top, the plasmid map left, the two assemblies right, the run sheet below. */
+:root{
+  --bg:#F1F4F7; --panel:#FFFFFF; --ink:#13202D; --muted:#566575; --rule:#D3DAE2;
+  --A:#1C9552; --C:#2462D6; --G:#B97F00; --T:#D2382E;
+  --hot:#BF1878; --ok:#136C42;
+  --display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C141D; --panel:#121D29; --ink:#E7EDF3; --muted:#93A2B2; --rule:#273645;
+    --A:#4FCB88; --C:#74A8FF; --G:#EFBC48; --T:#FF7A6E;
+    --hot:#FF72C4; --ok:#63D49C; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C141D; --panel:#121D29; --ink:#E7EDF3; --muted:#93A2B2; --rule:#273645;
+  --A:#4FCB88; --C:#74A8FF; --G:#EFBC48; --T:#FF7A6E;
+  --hot:#FF72C4; --ok:#63D49C; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55}
+.wrap{max-width:1120px;margin:0 auto;padding-block:28px 56px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:28px}
+.eyebrow{font-family:var(--mono);font-size:.75rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.7rem,4.4vw,2.9rem);line-height:1.04;letter-spacing:-.02em;margin:6px 0 0;text-wrap:balance;max-width:21ch}
+.lede{color:var(--muted);max-width:66ch;margin:10px 0 0}
+form{display:flex;flex-direction:column;gap:10px}
+.inrow{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+textarea{flex:1 1 320px;min-width:0;min-height:76px;resize:vertical;font:500 1.05rem/1.4 var(--body);color:var(--ink);
+  background:var(--panel);border:1.5px solid var(--ink);border-radius:3px;padding:10px 12px}
+button{font:600 .95rem var(--body);cursor:pointer;border-radius:3px}
+button:focus-visible,textarea:focus-visible{outline:3px solid var(--C);outline-offset:2px}
+.go{background:var(--ink);color:var(--bg);border:1.5px solid var(--ink);padding:10px 20px;flex:0 0 auto}
+.go:hover{opacity:.88}
+.chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chips span{font-size:.82rem;color:var(--muted)}
+.chip{background:transparent;color:var(--ink);border:1px solid var(--rule);padding:5px 11px;font-weight:500;font-size:.85rem}
+.chip:hover{border-color:var(--ink)}
+.msg{font-size:.88rem;color:var(--hot);min-height:1.2em;margin:0}
+.bench{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:32px;align-items:start}
+@media (max-width:820px){.bench{grid-template-columns:minmax(0,1fr)}}
+.map{position:relative;width:100%;max-width:560px;margin:0 auto;aspect-ratio:1}
+.map canvas{position:absolute;inset:0;width:100%;height:100%}
+.core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:40%;text-align:center;pointer-events:none}
+.core b{display:block;font-family:var(--display);font-weight:700;font-size:clamp(1.3rem,5vw,2.3rem);line-height:1;font-variant-numeric:tabular-nums}
+.core span{display:block;font-family:var(--mono);font-size:clamp(.6rem,1.6vw,.74rem);color:var(--muted);margin-top:6px;line-height:1.3}
+.key{font-size:.8rem;color:var(--muted);margin:8px auto 0;max-width:560px;display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+.key dt{font-family:var(--mono);color:var(--ink)}
+.key dd{margin:0}
+.results{display:flex;flex-direction:column;gap:26px;min-width:0}
+.res{min-width:0}
+.res h2{font-family:var(--mono);font-weight:500;font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;margin:0 0 10px;
+  padding-bottom:7px;border-bottom:1.5px solid var(--ink);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.res h2 em{font-style:normal;color:var(--muted);letter-spacing:.04em;text-transform:none}
+.frags{display:flex;flex-wrap:wrap;gap:7px;min-height:3.2rem;align-content:flex-start}
+.frag{font-family:var(--display);font-weight:500;font-size:1.02rem;line-height:1.25;white-space:pre-wrap;overflow-wrap:anywhere;
+  border:1px dashed var(--muted);padding:3px 7px;border-radius:2px}
+.frag.rep{border:1.5px solid var(--hot);color:var(--hot)}
+.frag sup{font-family:var(--mono);font-size:.66rem;margin-left:5px;vertical-align:top}
+.frag i{font-family:var(--mono);font-style:normal;font-size:.66rem;color:var(--muted);border:1px solid var(--rule);padding:0 4px;margin:0 4px;vertical-align:middle}
+.whole{font-family:var(--display);font-weight:700;font-size:clamp(1.35rem,2.7vw,2rem);line-height:1.14;letter-spacing:-.012em;
+  margin:0;min-height:3.4em;white-space:pre-wrap;overflow-wrap:anywhere}
+.whole .cur{display:inline-block;width:.5ch;height:.95em;background:var(--ok);vertical-align:-.1em;margin-left:2px}
+.verdict{font-size:.92rem;margin:10px 0 0;color:var(--muted);max-width:60ch;min-height:2.9em}
+.verdict strong{color:var(--ink);font-weight:600}
+.verdict.good strong{color:var(--ok)}
+.verdict.bad strong{color:var(--hot)}
+.again{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.again button{background:transparent;color:var(--ink);border:1.5px solid var(--ink);padding:7px 14px}
+.again button:hover{background:var(--ink);color:var(--bg)}
+.again span{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+h3{font-family:var(--display);font-weight:700;font-size:1.25rem;margin:0 0 10px;letter-spacing:-.01em}
+.reads{overflow-x:auto;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:10px 0}
+.reads pre{margin:0;font:400 .78rem/1.75 var(--mono);color:var(--muted)}
+.reads .bA{color:var(--A)}.reads .bC{color:var(--C)}.reads .bG{color:var(--G)}.reads .bT{color:var(--T)}
+.reads .er{background:var(--hot);color:var(--bg);font-weight:500}
+.cap{font-size:.84rem;color:var(--muted);margin:8px 0 0;max-width:70ch}
+.sheet{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 26px;margin:0}
+.sheet div{border-top:1px solid var(--rule);padding-top:7px;min-width:0}
+.sheet dt{font-size:.78rem;color:var(--muted)}
+.sheet dd{margin:2px 0 0;font:500 1.1rem var(--mono);font-variant-numeric:tabular-nums}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:28px 40px}
+.notes p,.notes li{font-size:.95rem;max-width:62ch}
+.notes p{margin:0 0 10px}
+.notes ul{margin:0;padding-left:1.1em}
+.notes li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em}
+footer{font-size:.82rem;color:var(--muted);border-top:1px solid var(--rule);padding-top:14px}
+@media (prefers-reduced-motion: reduce){.whole .cur{display:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Paired Ends / live assembly</p>
+    <h1>Your sentence, written as DNA, shredded, and assembled again.</h1>
+    <p class="lede">Type anything. This page encodes it as a circular DNA molecule, sequences it into short reads with 1% errors, and rebuilds it twice from the same reads. The only difference between the two results is whether the assembler is told which reads came from the same fragment. Nothing is precomputed. It all runs in your browser when you press the button.</p>
+  </header>
+
+  <form id="f">
+    <div class="inrow">
+      <textarea id="txt" maxlength="280" spellcheck="false" aria-label="Sentence to sequence">It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness</textarea>
+      <button class="go" id="go" type="submit">Sequence it</button>
+    </div>
+    <div class="chips">
+      <span>Or try:</span>
+      <button type="button" class="chip" id="p1" data-t="It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness">Dickens</button>
+      <button type="button" class="chip" id="p2" data-t="The reviewer asked for more samples, the editor asked for more controls, and the student asked for more coffee.">Peer review</button>
+      <button type="button" class="chip" id="p3" data-t="knock knock knock knock knock knock knock knock knock knock knock knock. Who is there? A tandem repeat.">A repeat that breaks it</button>
+      <button type="button" class="chip" id="p4" data-t="Sphinx of black quartz, judge my vow.">No repeats at all</button>
+    </div>
+    <p class="msg" id="msg" role="status"></p>
+  </form>
+
+  <section class="bench">
+    <div>
+      <div class="map">
+        <canvas id="cv" aria-label="Circular map of the encoded sentence with reads and assembled contigs"></canvas>
+        <div class="core"><b id="coreN"></b><span id="coreL"></span></div>
+      </div>
+      <dl class="key">
+        <dt>outside</dt><dd>read pairs, joined by a thin arc. Pink ticks are sequencing errors.</dd>
+        <dt>ring</dt><dd>your sentence, one tick per base (<span style="color:var(--A)">A</span> <span style="color:var(--C)">C</span> <span style="color:var(--G)">G</span> <span style="color:var(--T)">T</span>). The notch at twelve o'clock is the origin.</dd>
+        <dt>inside</dt><dd>contigs built without pairing. Pink ones are repeats, drawn everywhere they occur.</dd>
+        <dt>center arc</dt><dd>the assembly built with pairing.</dd>
+      </dl>
+    </div>
+
+    <div class="results">
+      <div class="res">
+        <h2>Pairing ignored <em id="hA"></em></h2>
+        <div class="frags" id="frags"></div>
+        <p class="verdict" id="vA"></p>
+      </div>
+      <div class="res">
+        <h2>Pairing used <em id="hB"></em></h2>
+        <p class="whole" id="whole"></p>
+        <p class="verdict" id="vB"></p>
+      </div>
+      <div class="again">
+        <button type="button" id="reseq">Sequence a fresh library</button>
+        <button type="button" id="replay">Replay</button>
+        <span id="lib"></span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h3>Six of the read pairs</h3>
+    <div class="reads"><pre id="reads"></pre></div>
+    <p class="cap">Each line is one fragment of your sentence: 32 bases read from the left end, 32 from the right, and an unread gap between. Highlighted bases are errors the sequencer made. The assembler sees only these letters and which two reads share a line.</p>
+  </section>
+
+  <section>
+    <h3>Run sheet</h3>
+    <dl class="sheet" id="sheet"></dl>
+  </section>
+
+  <section class="notes">
+    <div>
+      <h3>What just happened</h3>
+      <p>Each byte of your text became four bases, two bits per base. A fixed 24-base origin was added and the ends joined into a circle, the way a plasmid is built.</p>
+      <p>The sequencer cut random fragments from that circle and read 32 bases from each end, miscalling about one base in a hundred. The reads were counted as 21-mers. A 21-mer seen only once or twice is almost always an error, so reads containing one were repaired or dropped.</p>
+      <p>The surviving 21-mers form a de Bruijn graph. Wherever your sentence repeats five or more characters, the graph forks, and reads alone cannot say which branch follows which. The top result stops at every fork and reports the pieces.</p>
+      <p>The bottom result walks the same graph but keeps every fork alive as a competing path, then scores each path by how many read pairs land the right distance apart. The path that explains the most pairs wins.</p>
+    </div>
+    <div>
+      <h3>Where this is simpler than a real genome</h3>
+      <ul>
+        <li>One strand only. Real libraries read both strands, so a real assembler also handles reverse complements.</li>
+        <li>Errors are substitutions at a flat 1%. No indels, no quality scores, no GC bias.</li>
+        <li>The assembler is given the fragment size range and the origin sequence. Real pipelines estimate the first and often have no equivalent of the second.</li>
+        <li>Keeping every candidate path alive works for a few hundred bases. It would not scale to a real genome.</li>
+        <li>Your original text is used in two places only: the exact-match check at the end, and positioning the contigs on the drawing. The assembly never sees it.</li>
+        <li>A repeat longer than the fragments still defeats it. Try the knock-knock example. That limit is real, and it is why long reads exist.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>Built for <a href="https://blog.stephenturner.us/" style="color:inherit">Paired Ends</a> by Claude. View source to read the assembler: it is about 250 lines of plain JavaScript with no libraries.</footer>
+</div>
+
+<script>
+/*CORE-START*/
+const K=21, L=32, ORI='GATTACAGCGTCTAGGTCCATGAC', B='ACGT', COV=80, ERR=0.01, BEAM=256;
+function rng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function encode(text){const bytes=new TextEncoder().encode(text);let s='';for(const b of bytes)s+=B[b>>6]+B[b>>4&3]+B[b>>2&3]+B[b&3];return{bytes,dna:s}}
+function decodeBases(s){const n=s.length>>2,out=new Uint8Array(n);for(let i=0;i<n;i++){let v=0;for(let j=0;j<4;j++)v=v<<2|B.indexOf(s[i*4+j]);out[i]=v}return out}
+function toText(s){return new TextDecoder('utf-8').decode(decodeBases(s.slice(0,s.length-s.length%4)))}
+// A contig has no known reading frame. Try all four and keep the one that reads most like text.
+function guessFrame(seq){let best='',bs=-1e9;for(let f=0;f<4;f++){const t=toText(seq.slice(f));let sc=0;for(const ch of t){const c=ch.codePointAt(0);
+  if(c===0xFFFD||c<32||c===127)sc-=2;else if(c<127)sc+=1;else sc+=0.9*(c<0x800?2:c<0x10000?3:4)}if(sc>bs){bs=sc;best=t}}
+  return best.replace(/^\uFFFD+|\uFFFD+$/g,'')}
+
+function simulate(genome,seed){
+  const G=genome.length,r=rng(seed),gg=genome+genome;
+  const fmean=Math.min(140,Math.round(G*0.55)),fmin=Math.round(fmean*0.85),fmax=Math.round(fmean*1.15);
+  const N=Math.ceil(COV*G/(2*L)),pairs=[];let nerr=0;
+  const mut=t=>{let s='';const e=[];for(let i=0;i<t.length;i++){if(r()<ERR){let b;do{b=B[r()*4|0]}while(b===t[i]);s+=b;e.push(i)}else s+=t[i]}nerr+=e.length;return{s,e}};
+  for(let i=0;i<N;i++){const st=r()*G|0,f=fmin+(r()*(fmax-fmin+1)|0),frag=gg.substr(st,f);
+    const t1=frag.slice(0,L),t2=frag.slice(f-L),m1=mut(t1),m2=mut(t2);
+    pairs.push({st,f,t1,t2,s1:m1.s,s2:m2.s,e1:m1.e,e2:m2.e})}
+  return{pairs,fmin,fmax,nerr}
+}
+function countKmers(pairs){const m=new Map();const add=s=>{for(let i=0;i+K<=s.length;i++){const k=s.substr(i,K);m.set(k,(m.get(k)||0)+1)}};
+  for(const p of pairs){add(p.s1);add(p.s2)}return m}
+function solidSet(counts){const hi=[];for(const c of counts.values())if(c>=3)hi.push(c);hi.sort((a,b)=>a-b);
+  const depth=hi.length?hi[hi.length>>1]:0,T=Math.max(3,Math.floor(depth/4)),solid=new Map();let tot=0;
+  for(const[k,c]of counts)if(c>=T){solid.set(k,c);tot+=c}
+  return{solid,depth,T,gest:depth?Math.round(tot/depth):0}}
+// Spectral correction: a read is clean if all its 21-mers are solid. Otherwise accept a single substitution only if exactly one makes it clean.
+function correct(s,solid){const clean=x=>{for(let i=0;i+K<=x.length;i++)if(!solid.has(x.substr(i,K)))return false;return true};
+  if(clean(s))return{s,fixed:false};let hit=null,n=0;
+  for(let i=0;i<s.length;i++)for(const b of B){if(b===s[i])continue;const x=s.slice(0,i)+b+s.slice(i+1);if(clean(x)){hit=x;n++}}
+  return n===1?{s:hit,fixed:true}:{s:null,fixed:false}}
+
+function unitigs(solid){
+  const outs=k=>{const p=k.slice(1),r=[];for(const b of B)if(solid.has(p+b))r.push(p+b);return r};
+  const ins=k=>{const p=k.slice(0,-1),r=[];for(const b of B)if(solid.has(b+p))r.push(b+p);return r};
+  const seen=new Set(),res=[];
+  const isStart=k=>{const i=ins(k);return i.length!==1||outs(i[0]).length!==1};
+  const walk=k0=>{let seq=k0,k=k0,d=solid.get(k0),n=1;seen.add(k0);for(;;){const o=outs(k);if(o.length!==1)break;const nx=o[0];
+    if(seen.has(nx)||ins(nx).length!==1)break;seq+=nx[K-1];k=nx;seen.add(k);d+=solid.get(k);n++}return{seq,depth:d/n}};
+  for(const k of solid.keys())if(!seen.has(k)&&isStart(k))res.push(walk(k));
+  const o0=ORI.slice(0,K);
+  if(solid.has(o0)&&!seen.has(o0)){const u=walk(o0);u.seq=u.seq.slice(0,u.seq.length-(K-1));u.circular=true;res.push(u)}
+  for(const k of solid.keys())if(!seen.has(k)){const u=walk(k);u.circular=true;res.push(u)}
+  let forks=0;const pre=new Set();for(const k of solid.keys())pre.add(k.slice(0,K-1));
+  for(const p of pre){let n=0;for(const b of B)if(solid.has(p+b))n++;if(n>1)forks++}
+  return{list:res,forks}
+}
+function contigView(u,depth){const i=u.seq.indexOf(ORI);const copies=Math.max(1,Math.round(u.depth/depth));
+  if(i>=0){const before=u.seq.slice(0,i),after=u.seq.slice(i+ORI.length);
+    return{parts:[toText(before.slice(before.length%4)),toText(after)],ori:true,len:u.seq.length,copies}}
+  return{parts:[guessFrame(u.seq)],ori:false,len:u.seq.length,copies}}
+
+function circSupport(g,pairs,fmin,fmax){const gg=g+g+g,n=g.length;let c=0;
+  for(const p of pairs){if(!p.c1||!p.c2)continue;let ok=false,from=0,tries=0;
+    for(;;){const a=gg.indexOf(p.c1,from);if(a<0||a>=n||++tries>40)break;const j=gg.indexOf(p.c2,a+fmin-L);if(j>=0&&j<=a+fmax-L){ok=true;break}from=a+1}
+    if(ok)c++}return c}
+
+// Walk the graph from the origin. Every fork spawns a competing path; a path earns a point for each read pair whose
+// two reads sit the right distance apart in it. Keep the best BEAM paths, and stop a path when it returns to the origin.
+function assemblePaired(solid,pairs,fmin,fmax,gest){
+  const o0=ORI.slice(0,K);if(!solid.has(o0))return{fail:true};
+  const byLast=new Map();let usable=0;
+  pairs.forEach((p,i)=>{if(p.c1&&p.c2){usable++;const key=p.c2.slice(L-K);let a=byLast.get(key);if(!a)byLast.set(key,a=[]);a.push(i)}});
+  let beam=[{s:ORI,sup:new Uint8Array(pairs.length),score:0}];const done=new Map();
+  const cap=Math.round(gest*1.5)+200,clock=Date.now();let explored=1;
+  while(beam.length&&done.size<300&&Date.now()-clock<1500){const next=[];
+    for(const h of beam){const pre=h.s.slice(-(K-1)),opts=[];for(const b of B)if(solid.has(pre+b))opts.push(b);
+      explored+=Math.max(0,opts.length-1);
+      for(let j=0;j<opts.length;j++){const km=pre+opts[j],s=h.s+opts[j];
+        if(km===o0){const g=s.slice(0,s.length-K);if(!done.has(g))done.set(g,1);continue}
+        if(s.length>cap)continue;
+        const sup=j===opts.length-1?h.sup:h.sup.slice();let score=h.score;const list=byLast.get(km);
+        if(list&&s.length>=L){const lo=Math.max(0,s.length-fmax),hi=s.length-fmin;
+          if(hi>=0)for(const i of list){if(sup[i])continue;const p=pairs[i];if(!s.endsWith(p.c2))continue;
+            const a=s.indexOf(p.c1,lo);if(a>=0&&a<=hi){sup[i]=1;score++}}}
+        next.push({s,sup,score})}}
+    if(next.length>BEAM){next.sort((a,b)=>b.score-a.score);next.length=BEAM}
+    beam=next}
+  if(!done.size)return{fail:true,explored,usable};
+  // Every base must pay for itself: a real stretch of sequence brings about usable/gest pairs per base with it,
+  // so charge half that per base. A path that repeats a segment just to pick up one stray pair loses.
+  const rent=0.5*usable/Math.max(gest,1);let best=null;
+  for(const g of done.keys()){const sup=circSupport(g,pairs,fmin,fmax),sc=sup-rent*g.length;if(!best||sc>best.sc)best={g,sc,sup}}
+  return{genome:best.g,support:best.sup,usable,explored,closed:done.size}
+}
+
+function run(text,seed){
+  const t0=(typeof performance!=='undefined'?performance:Date).now();
+  const enc=encode(text),genome=ORI+enc.dna,G=genome.length;
+  const sim=simulate(genome,seed),counts=countKmers(sim.pairs),ss=solidSet(counts);
+  let fixed=0,dropped=0,dirty=0,wrongFix=0;
+  for(const p of sim.pairs){for(const w of[1,2]){const obs=p['s'+w],r=correct(obs,ss.solid);p['c'+w]=r.s;
+    if(p['e'+w].length)dirty++;if(r.fixed){fixed++;if(r.s!==p['t'+w])wrongFix++}if(!r.s)dropped++}}
+  // Tip clipping: a short, thinly covered contig is an error that slipped past the k-mer filter. Remove it and rebuild.
+  let ut=unitigs(ss.solid),clipped=0;
+  for(const u of ut.list)if(u.seq.length<2*K&&u.depth<0.4*ss.depth&&u.seq.indexOf(ORI.slice(0,K))<0){clipped++;for(let i=0;i+K<=u.seq.length;i++)ss.solid.delete(u.seq.substr(i,K))}
+  if(clipped)ut=unitigs(ss.solid);
+  const contigs=ut.list.map(u=>({...contigView(u,ss.depth),seq:u.seq,circular:!!u.circular})).sort((a,b)=>b.len-a.len);
+  const lens=contigs.map(c=>c.len),tot=lens.reduce((a,b)=>a+b,0);let acc=0,n50=0;for(const l of lens){acc+=l;if(acc>=tot/2){n50=l;break}}
+  const pe=assemblePaired(ss.solid,sim.pairs,sim.fmin,sim.fmax,ss.gest);
+  let peText='',exact=false;if(!pe.fail){peText=toText(pe.genome.slice(ORI.length));exact=pe.genome===genome}
+  const seExact=contigs.length===1&&contigs[0].circular&&contigs[0].seq===genome;
+  return{text,bytes:enc.bytes.length,genome,G,pairs:sim.pairs,fmin:sim.fmin,fmax:sim.fmax,nerr:sim.nerr,dirty,fixed,dropped,wrongFix,
+    kmers:ss.solid.size,allKmers:counts.size,depth:ss.depth,T:ss.T,gest:ss.gest,forks:ut.forks,contigs,n50,seExact,pe,peText,exact,
+    ms:(typeof performance!=='undefined'?performance:Date).now()-t0,seed}
+}
+/*CORE-END*/
+
+// ---------- drawing and page ----------
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+let R=null,layout=null,prog={e:1,s:1,a:1},raf=0,killer=0,seed=2026;
+const reduce=matchMedia('(prefers-reduced-motion: reduce)');
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function buildLayout(res){
+  const G=res.G,M=Math.min(res.pairs.length,260),layers=[],shown=[];
+  const free=(lay,a,b)=>{for(const[x,y]of lay)if(a<y+6&&b>x-6)return false;return true};
+  for(let i=0;i<M;i++){const p=res.pairs[i],a=p.st,b=p.st+p.f;
+    const segs=b<=G?[[a,b]]:[[a,G],[0,b-G]];
+    for(let l=0;l<15;l++){const lay=layers[l]||(layers[l]=[]);if(segs.every(s=>free(lay,s[0],s[1]))){segs.forEach(s=>lay.push(s));shown.push({p,l});break}}}
+  const gg=res.genome+res.genome,occ=[];
+  res.contigs.forEach((c,ci)=>{const pos=[];let from=0;for(;;){const a=gg.indexOf(c.seq,from);if(a<0||a>=G)break;pos.push(a);from=a+1}
+    pos.forEach(a=>occ.push({a,len:c.len,rep:pos.length>1||c.copies>1,ci}))});
+  occ.sort((x,y)=>x.a-y.a);occ.forEach((o,i)=>o.alt=i%2);
+  return{shown,occ}
+}
+function draw(){
+  if(!R)return;const dpr=Math.min(devicePixelRatio||1,2.5),W=cv.clientWidth;if(!W)return;
+  if(cv.width!==Math.round(W*dpr)){cv.width=cv.height=Math.round(W*dpr)}
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,W);
+  const col={A:css('--A'),C:css('--C'),G:css('--G'),T:css('--T'),ink:css('--ink'),muted:css('--muted'),hot:css('--hot'),ok:css('--ok'),rule:css('--rule')};
+  const G=R.G,cx=W/2,cy=W/2,r0=W*0.292,th=i=>-Math.PI/2+2*Math.PI*i/G;
+  const arc=(r,a,b,w,c,al)=>{ctx.globalAlpha=al==null?1:al;ctx.strokeStyle=c;ctx.lineWidth=w;ctx.beginPath();ctx.arc(cx,cy,r,th(a),th(b));ctx.stroke()};
+  ctx.lineCap='butt';
+  // base ring
+  const nb=Math.round(prog.e*G),bw=W*0.03;
+  for(let i=0;i<nb;i++)arc(r0,i,i+1.08,bw,col[R.genome[i]],i<ORI.length?0.45:1);
+  ctx.globalAlpha=1;ctx.fillStyle=col.ink;ctx.beginPath();ctx.moveTo(cx,cy-r0-bw*0.2);ctx.lineTo(cx-W*0.012,cy-r0-bw*0.95);ctx.lineTo(cx+W*0.012,cy-r0-bw*0.95);ctx.fill();
+  // read pairs
+  const ns=Math.round(prog.s*layout.shown.length),lw=W*0.0062,step=W*0.0104,rb=r0+bw*0.5+W*0.03;
+  for(let i=0;i<ns;i++){const{p,l}=layout.shown[i],r=rb+l*step;
+    arc(r,p.st+L,p.st+p.f-L,0.8,col.muted,0.55);
+    arc(r,p.st,p.st+L,lw,col.ink,0.8);arc(r,p.st+p.f-L,p.st+p.f,lw,col.ink,0.8);
+    for(const e of p.e1)arc(r,p.st+e-0.6,p.st+e+1.6,lw*1.5,col.hot,1);
+    for(const e of p.e2)arc(r,p.st+p.f-L+e-0.6,p.st+p.f-L+e+1.6,lw*1.5,col.hot,1)}
+  // contigs without pairing
+  const ra=r0-bw*0.5-W*0.03,al=Math.min(1,prog.a*3.5);
+  if(al>0)for(const o of layout.occ){const pad=Math.min(o.len*0.2,(K-1)/2-1.5);
+    arc(ra-o.alt*W*0.014,o.a+pad,o.a+o.len-pad,W*0.0095,o.rep?col.hot:col.ink,al*(o.rep?1:0.78))}
+  // assembly with pairing
+  if(prog.a>0&&!R.pe.fail){const rp=ra-W*0.052,n=R.pe.genome.length*ease(prog.a);
+    arc(rp,0,Math.min(n,G*0.9995)*(R.exact?1:G/R.pe.genome.length),W*0.013,R.exact?col.ok:col.hot,1);
+    if(prog.a<1){const t=th(n*(R.exact?1:G/R.pe.genome.length));ctx.globalAlpha=1;ctx.fillStyle=R.exact?col.ok:col.hot;ctx.beginPath();ctx.arc(cx+rp*Math.cos(t),cy+rp*Math.sin(t),W*0.011,0,7);ctx.fill()}}
+  ctx.globalAlpha=1;
+}
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+let lastTxt=-1,lastFr=-1,lastPhase='';
+function paint(){
+  draw();if(!R)return;
+  let n,l;
+  if(prog.e<1){n=Math.round(prog.e*R.G).toLocaleString();l='bases written'}
+  else if(prog.s<1){n=Math.round(prog.s*R.pairs.length).toLocaleString();l='read pairs sequenced'}
+  else if(prog.a<1){n=R.pe.fail?'...':Math.round(ease(prog.a)*R.pe.genome.length).toLocaleString();l='bases assembled'}
+  else{n=R.contigs.length+' vs 1';l=(R.contigs.length===1?'contig':'contigs')+' without pairing, with pairing'}
+  if(R.pe.fail&&prog.a>=1){n=R.contigs.length+' vs 0'}
+  if($('coreN').textContent!==n)$('coreN').textContent=n;
+  if(lastPhase!==l){$('coreL').textContent=l;lastPhase=l}
+  // fragments
+  const nf=prog.a<=0?0:Math.min(R.contigs.length,Math.ceil(prog.a*2.2*R.contigs.length));
+  if(nf!==lastFr){const box=$('frags');
+    while(box.children.length>nf)box.lastChild.remove();
+    for(let i=box.children.length;i<nf;i++){const c=R.contigs[i],el=document.createElement('span');el.className='frag'+(c.copies>1?' rep':'');
+      if(c.ori){el.append(c.parts[0]);if(!c.circular||c.parts[0]){const o=document.createElement('i');o.textContent='origin';el.append(o)}el.append(c.parts[1])}
+      else el.append(c.parts[0]);
+      if(c.copies>1){const s=document.createElement('sup');s.textContent='x'+c.copies+' by depth';el.append(s)}
+      box.append(el)}
+    lastFr=nf}
+  // whole
+  const full=R.pe.fail?'':R.peText,nt=Math.round(ease(prog.a)*[...full].length);
+  if(nt!==lastTxt||prog.a>=1){const w=$('whole');w.textContent=[...full].slice(0,nt).join('');
+    if(prog.a<1&&prog.a>0){const c=document.createElement('span');c.className='cur';w.append(c)}lastTxt=nt}
+  if(prog.a>=1)verdicts();else{$('vA').textContent='';$('vB').textContent='';$('vA').className=$('vB').className='verdict'}
+}
+function verdicts(){
+  const a=$('vA'),b=$('vB'),nc=R.contigs.length;
+  const set=(el,cls,head,rest)=>{el.className='verdict '+cls;el.textContent='';const s=document.createElement('strong');s.textContent=head;el.append(s,' '+rest)};
+  if(R.seExact)set(a,'good','One contig, and it is your sentence.','Nothing in it repeats five characters in a row, so the graph never forked and pairing had nothing to add. Try a sentence that repeats itself.');
+  else set(a,'bad',nc+' contigs, in no particular order.','The graph forks at '+R.forks+(R.forks===1?' repeat':' repeats')+' in your sentence, and single reads cannot say which piece follows which. Contig N50: '+R.n50+' bases.');
+  if(R.pe.fail)set(b,'bad','No closed path found.','The walk never returned to the origin. Sequence a fresh library and try again.');
+  else if(R.exact)set(b,'good','Identical to what you typed.',R.bytes+' of '+R.bytes+' bytes, '+R.G.toLocaleString()+' bases. '+R.pe.support.toLocaleString()+' of '+R.pe.usable.toLocaleString()+' usable pairs sit the right distance apart in this path, out of '+R.pe.explored.toLocaleString()+' paths explored.');
+  else{const d=R.G-R.pe.genome.length;
+    set(b,'bad','Not what you typed.',d!==0?'The assembly is '+Math.abs(d)+' bases '+(d>0?'shorter':'longer')+' than the molecule. A repeat longer than the fragments (at most '+R.fmax+' bases here) has no pair reaching across it, so the number of copies is a guess. Depth of coverage puts the true size near '+R.gest.toLocaleString()+' bases; the assembly came out at '+R.pe.genome.length.toLocaleString()+'.'
+      :'Right length, wrong order. Two arrangements of the repeats explain the pairs almost equally well, and this library favored the wrong one. Sequence a fresh library to see how often that happens.')}
+}
+function static_(){
+  $('hA').textContent=R.pairs.length*2+' reads, unpaired';$('hB').textContent='the same '+R.pairs.length*2+' reads, as '+R.pairs.length+' pairs';
+  $('lib').textContent='library #'+R.seed+', computed in '+R.ms.toFixed(0)+' ms';
+  // reads
+  const pick=[];for(const p of R.pairs){if(pick.length<3&&(p.e1.length||p.e2.length))pick.push(p)}for(const p of R.pairs){if(pick.length<6&&!pick.includes(p))pick.push(p)}
+  const pre=$('reads');pre.textContent='';
+  const seq=(s,e)=>{const f=document.createDocumentFragment();for(let i=0;i<s.length;i++){const sp=document.createElement('span');sp.className=e.includes(i)?'er':'b'+s[i];sp.textContent=s[i];f.append(sp)}return f};
+  pick.forEach((p,i)=>{pre.append('R1 ',seq(p.s1,p.e1),'  ...'+String(p.f-2*L).padStart(3,' ')+' unread...  R2 ',seq(p.s2,p.e2),i<pick.length-1?'\n':'')});
+  // sheet
+  const rows=[['Molecule',R.G.toLocaleString()+' bases'],['Read pairs',R.pairs.length.toLocaleString()],['Coverage',Math.round(R.pairs.length*2*L/R.G)+'x'],
+    ['Fragment size',R.fmin+' to '+R.fmax],['Bases miscalled',R.nerr.toLocaleString()],['Reads with errors',R.dirty.toLocaleString()],
+    ['Reads repaired',R.fixed.toLocaleString()+(R.wrongFix?' ('+R.wrongFix+' wrongly)':'')],['Reads dropped',R.dropped.toLocaleString()],
+    ['Distinct 21-mers seen',R.allKmers.toLocaleString()],['Kept as real (seen '+R.T+'+ times)',R.kmers.toLocaleString()],
+    ['Size estimated from depth',R.gest.toLocaleString()+' bases'],['Forks in the graph',R.forks]];
+  const sh=$('sheet');sh.textContent='';for(const[k,v]of rows){const d=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=k;dd.textContent=v;d.append(dt,dd);sh.append(d)}
+}
+function play(instant){
+  cancelAnimationFrame(raf);clearTimeout(killer);lastTxt=lastFr=-1;lastPhase='';$('frags').textContent='';
+  if(instant||reduce.matches){prog={e:1,s:1,a:1};paint();return}
+  const D=[800,1900,2800],t0=performance.now(),c=x=>Math.max(0,Math.min(1,x));
+  const fr=now=>{const t=now-t0;prog={e:c(t/D[0]),s:c((t-D[0])/D[1]),a:c((t-D[0]-D[1])/D[2])};paint();if(prog.a<1)raf=requestAnimationFrame(fr)};
+  prog={e:0,s:0,a:0};paint();raf=requestAnimationFrame(fr);
+  killer=setTimeout(()=>{cancelAnimationFrame(raf);prog={e:1,s:1,a:1};paint()},D[0]+D[1]+D[2]+700);
+}
+function go(instant){
+  const text=$('txt').value.replace(/\s+/g,' ').trim(),nb=new TextEncoder().encode(text).length;
+  if(nb<24){$('msg').textContent='Give it at least 24 characters. Shorter than that and the molecule is smaller than one fragment.';return}
+  if(nb>400){$('msg').textContent='That is '+nb+' bytes. Keep it under 400 so the ring stays readable.';return}
+  $('msg').textContent='';R=run(text,seed);layout=buildLayout(R);static_();play(instant);
+}
+$('f').addEventListener('submit',e=>{e.preventDefault();go()});
+$('txt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();go()}});
+for(const id of['p1','p2','p3','p4'])$(id).addEventListener('click',e=>{$('txt').value=e.currentTarget.dataset.t;go()});
+$('reseq').addEventListener('click',()=>{seed=1+(Math.random()*99999|0);go()});
+$('replay').addEventListener('click',()=>play());
+new ResizeObserver(()=>draw()).observe(cv);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);
+new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(draw);
+go();
+</script>
+
+</body></html>
